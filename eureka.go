@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"strings"
 )
 
 type Instance struct {
@@ -50,44 +51,62 @@ func RegisterEureka(eurekaInstance *Instance) (string, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	eurekaUrl := os.Getenv("EUREKA_CLIENT_SERVICEURL_DEFAULTZONE")
+	eurekaUrlList := os.Getenv("EUREKA_CLIENT_SERVICEURL_DEFAULTZONE")
 
-	if len(eurekaUrl) == 0 {
-		eurekaUrl = "http://localhost:8761"
-	}
-	req, err := http.NewRequest("POST", eurekaUrl+"/eureka/apps/"+eurekaInstance.Instance.App, bytes.NewReader(marshalledInfo))
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("DiscoveryIdentity-Name", "DefaultClient")
-	req.Header.Add("DiscoveryIdentity-Version", "1.4")
-	req.Header.Add("DiscoveryIdentity-Id", eurekaInstance.Instance.HostName)
-
-	if err != nil {
-		log.Fatal(err)
+	if len(eurekaUrlList) == 0 {
+		eurekaUrlList = "http://localhost:8761"
 	}
 
-	response, err := client2.Do(req)
-	if err != nil {
-		fmt.Printf(err.Error())
-		return "nil", err
-	}
+	eurekaUrlResult := strings.Split(eurekaUrlList, ",")
 
-	bytesValue, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		fmt.Printf(err.Error())
+	var resultError error
+	resultError = nil
+
+	var resultStatus string
+	
+	for _,eurekaUrl := range eurekaUrlResult{
+
+
+		req, err := http.NewRequest("POST", eurekaUrl+"/eureka/apps/"+eurekaInstance.Instance.App, bytes.NewReader(marshalledInfo))
+		req.Header.Add("Content-Type", "application/json")
+		req.Header.Add("DiscoveryIdentity-Name", "DefaultClient")
+		req.Header.Add("DiscoveryIdentity-Version", "1.4")
+		req.Header.Add("DiscoveryIdentity-Id", eurekaInstance.Instance.HostName)
+		if err != nil {
+			log.Fatal(err)
+		}
+	
+		response, err := client2.Do(req)
+		if err != nil {
+			fmt.Printf(err.Error())
+			resultError = err
+			continue
+		}
+	
+		bytesValue, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			fmt.Printf(err.Error())
+			resultError = err
+			continue
+		}
+		fmt.Println(string(bytesValue))
+		fmt.Println(response.Status)
+		resultStatus = response.Status
 	}
-	fmt.Println(string(bytesValue))
-	fmt.Println(response.Status)
+	
 
 	//done := make(chan bool)
 	ticker := time.NewTicker(30 * time.Second)
 	go func() {
 		for t := range ticker.C {
 			fmt.Println("Send HearBeat at", t)
-			SendHeartbeat(client2, eurekaUrl+"/eureka/apps/"+eurekaInstance.Instance.App+"/"+eurekaInstance.Instance.InstanceId)
+			for _,eurekaUrl := range eurekaUrlResult{
+				SendHeartbeat(client2, eurekaUrl+"/eureka/apps/"+eurekaInstance.Instance.App+"/"+eurekaInstance.Instance.InstanceId)
+			}
 		}
 	}()
 
-	return response.Status, err
+	return resultStatus, resultError
 }
 
 func SendHeartbeat(client *http.Client, url string) {
