@@ -132,25 +132,37 @@ func SendHeartbeat(client *http.Client, url string) {
 }
 
 func GetEurekaHealth() ([]byte, error) {
-	eurekaUrl := os.Getenv("EUREKA_CLIENT_SERVICEURL_DEFAULTZONE")
+	eurekaUrlList := os.Getenv("EUREKA_CLIENT_SERVICEURL_DEFAULTZONE")
 
-	if len(eurekaUrl) == 0 {
-		eurekaUrl = "http://localhost:8761"
+	if len(eurekaUrlList) == 0 {
+		eurekaUrlList = "http://localhost:8761"
 	}
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", eurekaUrl+"/health", nil)
+	eurekaUrlResult := strings.Split(eurekaUrlList, ",")
 
-	response, err := client.Do(req)
-	if err != nil {
-		log.Fatalln(err.Error())
-		return nil, err
+	var resultError error
+	resultError = nil
+
+
+	for _,eurekaUrl := range eurekaUrlResult{
+
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", eurekaUrl+"/health", nil)
+		resultError = err
+		response, err := client.Do(req)
+		if err != nil {
+			log.Fatalln(err.Error())
+			return nil, err
+		}
+		bytesValue, err := ioutil.ReadAll(response.Body)
+		
+		if err != nil {
+			log.Fatalln(err.Error())
+			return nil, err
+		}
+		return bytesValue, nil
 	}
-	bytesValue, err := ioutil.ReadAll(response.Body)
 
-	if err != nil {
-		log.Fatalln(err.Error())
-		return nil, err
-	}
+	return nil, resultError
 
-	return bytesValue, nil
+	
 }
